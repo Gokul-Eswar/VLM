@@ -1,7 +1,7 @@
 # Track Plan: Integrate ChromaDB for Persistent Tracking Results
 
 ## Phase 1: Core Database Integration
-- [ ] Task: Write Tests for `DatabaseManager` Initialization and Schema
+- [~] Task: Write Tests for `DatabaseManager` Initialization and Schema
 - [ ] Task: Implement `DatabaseManager` with ChromaDB Support
 - [ ] Task: Write Tests for Data Persistence and Retrieval
 - [ ] Task: Implement Add/Retrieve logic in `DatabaseManager`
