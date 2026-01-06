@@ -1,0 +1,32 @@
+# Project Spectrum Configuration
+
+# Detection Settings
+detection:
+  model_size: "n"  # Options: n, s, m, l, x
+  confidence_threshold: 0.5
+  device: "auto"  # Options: auto, cuda, cpu
+
+# Tracking Settings
+tracking:
+  max_age: 30  # Maximum frames to keep track without detection
+  min_hits: 3  # Minimum detections before track is confirmed
+  iou_threshold: 0.3
+
+# VLM Settings
+vlm:
+  model_name: "Qwen/Qwen2-VL-7B-Instruct"
+  max_tokens: 256
+  temperature: 0.7
+
+# Deployment Settings
+deployment:
+  api_port: 8000
+  max_workers: 4
+  timeout: 30
+
+# Video Processing
+video:
+  input_fps: 30
+  output_fps: 30
+  resolution: [1280, 720]  # Width, Height
+  codec: "mp4v"
