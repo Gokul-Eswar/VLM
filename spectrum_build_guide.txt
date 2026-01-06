@@ -1,0 +1,441 @@
+# Project Spectrum: Vision-Language Tracking System
+## Complete Build Guide for Beginners
+
+---
+
+## 🎯 Project Overview
+
+You're building a cutting-edge AI system that can:
+- Track objects in real-time video (people, animals, vehicles)
+- Understand what it's tracking semantically ("person in red jacket")
+- Handle occlusions (objects hidden behind trees/buildings)
+- Work on both edge devices (drones, smart glasses) and cloud servers
+
+---
+
+## 📋 Prerequisites
+
+### Hardware
+- ✅ GPU-enabled computer (you have this)
+- Minimum: NVIDIA GPU with 8GB VRAM (RTX 3060+)
+- Recommended: 16GB VRAM (RTX 4070+ or better)
+- 32GB System RAM recommended
+
+### Software to Install
+1. **Python 3.11+** (not 3.13 yet, as some libraries aren't compatible)
+2. **CUDA Toolkit 12.1+** (for GPU acceleration)
+3. **Git** (for version control)
+4. **Visual Studio Code** (recommended IDE)
+
+---
+
+## 🚀 Phase 1: Environment Setup (Days 1-2)
+
+### Step 1.1: Create Project Structure
+
+```bash
+# Create main project folder
+mkdir project-spectrum
+cd project-spectrum
+
+# Create folder structure
+mkdir -p {data,models,src,notebooks,tests,configs,outputs}
+mkdir -p src/{detection,tracking,vlm,deployment}
+```
+
+**What each folder does:**
+- `data/`: Store test videos and datasets
+- `models/`: Downloaded AI model weights
+- `src/`: Your Python code
+- `notebooks/`: Jupyter notebooks for experimentation
+- `tests/`: Test scripts
+- `configs/`: Configuration files
+- `outputs/`: Results and logs
+
+### Step 1.2: Set Up Python Environment
+
+```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate it
+# Windows:
+venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
+
+# Upgrade pip
+pip install --upgrade pip
+```
+
+### Step 1.3: Install Core Dependencies
+
+Create a file called `requirements.txt`:
+
+```txt
+# Core ML Framework
+torch>=2.1.0
+torchvision>=0.16.0
+torchaudio>=2.1.0
+
+# Computer Vision
+opencv-python>=4.8.0
+opencv-contrib-python>=4.8.0
+ultralytics>=8.0.0  # YOLO
+supervision>=0.16.0  # Visualization tools
+
+# Vision-Language Model
+transformers>=4.36.0
+accelerate>=0.25.0
+sentencepiece>=0.1.99
+pillow>=10.0.0
+
+# Deployment
+bentoml>=1.2.0
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Utilities
+numpy>=1.24.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+tqdm>=4.66.0
+pyyaml>=6.0
+requests>=2.31.0
+
+# Optional but useful
+jupyter>=1.0.0
+ipykernel>=6.26.0
+```
+
+Install everything:
+```bash
+pip install -r requirements.txt
+```
+
+### Step 1.4: Verify GPU Setup
+
+Create `tests/test_gpu.py`:
+
+```python
+import torch
+import torchvision
+
+print("=" * 50)
+print("GPU SETUP VERIFICATION")
+print("=" * 50)
+
+# Check PyTorch
+print(f"\nPyTorch Version: {torch.__version__}")
+print(f"Torchvision Version: {torchvision.__version__}")
+
+# Check CUDA
+print(f"\nCUDA Available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"CUDA Version: {torch.version.cuda}")
+    print(f"GPU Count: {torch.cuda.device_count()}")
+    print(f"GPU Name: {torch.cuda.get_device_name(0)}")
+    print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    
+    # Test GPU computation
+    x = torch.randn(1000, 1000).cuda()
+    y = torch.randn(1000, 1000).cuda()
+    z = torch.mm(x, y)
+    print("\n✅ GPU computation test: PASSED")
+else:
+    print("\n⚠️ WARNING: CUDA not available. Using CPU only.")
+
+print("=" * 50)
+```
+
+Run it:
+```bash
+python tests/test_gpu.py
+```
+
+**Expected output:** Should show your GPU name and memory.
+
+---
+
+## 🔍 Phase 2: Object Detection Foundation (Days 3-7)
+
+We'll start with YOLO - the "eyes" of your system.
+
+### Step 2.1: Download Test Data
+
+Create `data/download_test_video.py`:
+
+```python
+import urllib.request
+import os
+
+def download_sample_videos():
+    """Download sample videos for testing"""
+    
+    videos = {
+        "city_traffic.mp4": "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
+        # You can add more sample video URLs here
+    }
+    
+    os.makedirs("data/test_videos", exist_ok=True)
+    
+    for filename, url in videos.items():
+        output_path = f"data/test_videos/{filename}"
+        if not os.path.exists(output_path):
+            print(f"Downloading {filename}...")
+            try:
+                urllib.request.urlretrieve(url, output_path)
+                print(f"✅ Downloaded: {filename}")
+            except Exception as e:
+                print(f"❌ Failed to download {filename}: {e}")
+        else:
+            print(f"⏭️ Already exists: {filename}")
+
+if __name__ == "__main__":
+    download_sample_videos()
+    print("\n📁 Videos saved in: data/test_videos/")
+```
+
+### Step 2.2: Basic YOLO Detection
+
+Create `src/detection/yolo_detector.py`:
+
+```python
+"""
+YOLO Detector Module
+This handles real-time object detection - the "eyes" of our system
+"""
+
+from ultralytics import YOLO
+import cv2
+import torch
+import numpy as np
+from pathlib import Path
+
+class YOLODetector:
+    def __init__(self, model_size='x', device='auto'):
+        """
+        Initialize YOLO detector
+        
+        Args:
+            model_size: 'n' (nano), 's' (small), 'm' (medium), 'l' (large), 'x' (xlarge)
+            device: 'auto', 'cpu', or 'cuda'
+        """
+        self.device = self._setup_device(device)
+        self.model = self._load_model(model_size)
+        print(f"✅ YOLO detector initialized on {self.device}")
+    
+    def _setup_device(self, device):
+        """Determine which device to use"""
+        if device == 'auto':
+            return 'cuda' if torch.cuda.is_available() else 'cpu'
+        return device
+    
+    def _load_model(self, size):
+        """Load YOLO model"""
+        model_name = f'yolov8{size}.pt'
+        print(f"Loading {model_name}...")
+        model = YOLO(model_name)
+        model.to(self.device)
+        return model
+    
+    def detect(self, frame, conf_threshold=0.5):
+        """
+        Detect objects in a single frame
+        
+        Args:
+            frame: Image as numpy array (BGR format from OpenCV)
+            conf_threshold: Confidence threshold (0-1)
+            
+        Returns:
+            List of detections with bounding boxes and labels
+        """
+        results = self.model(frame, conf=conf_threshold, verbose=False)[0]
+        
+        detections = []
+        for box in results.boxes:
+            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+            conf = float(box.conf[0])
+            cls = int(box.cls[0])
+            label = results.names[cls]
+            
+            detections.append({
+                'bbox': [int(x1), int(y1), int(x2), int(y2)],
+                'confidence': conf,
+                'class': label,
+                'class_id': cls
+            })
+        
+        return detections
+    
+    def detect_video(self, video_path, output_path=None, show=True):
+        """
+        Process entire video
+        
+        Args:
+            video_path: Path to input video
+            output_path: Path to save output video (optional)
+            show: Display video while processing
+        """
+        cap = cv2.VideoCapture(video_path)
+        
+        # Get video properties
+        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        
+        print(f"Video: {width}x{height} @ {fps}fps, {total_frames} frames")
+        
+        # Setup video writer if saving
+        writer = None
+        if output_path:
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        
+        frame_count = 0
+        
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            
+            # Detect objects
+            detections = self.detect(frame)
+            
+            # Draw bounding boxes
+            annotated_frame = self._draw_detections(frame, detections)
+            
+            # Display FPS
+            cv2.putText(annotated_frame, f"Frame: {frame_count}/{total_frames}", 
+                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            
+            if writer:
+                writer.write(annotated_frame)
+            
+            if show:
+                cv2.imshow('YOLO Detection', annotated_frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+            
+            frame_count += 1
+        
+        cap.release()
+        if writer:
+            writer.release()
+        cv2.destroyAllWindows()
+        
+        print(f"✅ Processed {frame_count} frames")
+    
+    def _draw_detections(self, frame, detections):
+        """Draw bounding boxes on frame"""
+        annotated = frame.copy()
+        
+        for det in detections:
+            x1, y1, x2, y2 = det['bbox']
+            label = f"{det['class']} {det['confidence']:.2f}"
+            
+            # Draw box
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            
+            # Draw label background
+            label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+            cv2.rectangle(annotated, (x1, y1 - label_size[1] - 10), 
+                         (x1 + label_size[0], y1), (0, 255, 0), -1)
+            
+            # Draw label text
+            cv2.putText(annotated, label, (x1, y1 - 5), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+        
+        return annotated
+
+
+# Test script
+if __name__ == "__main__":
+    # Initialize detector
+    detector = YOLODetector(model_size='n')  # Start with nano for speed
+    
+    # Test on webcam
+    print("\nTesting on webcam (press 'q' to quit)...")
+    detector.detect_video(0)  # 0 = default webcam
+```
+
+### Step 2.3: Run Your First Detection
+
+```bash
+# This will use your webcam
+python src/detection/yolo_detector.py
+```
+
+**What you should see:** 
+- Real-time detection boxes around objects
+- Labels like "person", "car", "bottle"
+- FPS counter
+
+Press 'q' to quit.
+
+---
+
+## 📝 Learning Checkpoint
+
+Before moving to Phase 3, make sure you:
+- ✅ Can run the GPU test successfully
+- ✅ YOLO detects objects in your webcam
+- ✅ Understand what bounding boxes are
+- ✅ Know where your code files are located
+
+---
+
+## 🧠 Phase 3: Vision-Language Model Integration (Days 8-14)
+
+**Coming next:** We'll add the "reasoning brain" that understands what objects mean, not just where they are.
+
+This phase will integrate Qwen2.5-VL to give your system semantic understanding.
+
+---
+
+## 🎓 Learning Resources
+
+As you build, refer to these:
+
+1. **Python Basics:** If you get stuck with Python syntax
+   - [Python.org Tutorial](https://docs.python.org/3/tutorial/)
+
+2. **PyTorch Basics:** Understanding tensors and GPU operations
+   - [PyTorch 60-min Blitz](https://pytorch.org/tutorials/beginner/deep_learning_60min_blitz.html)
+
+3. **Computer Vision Concepts:**
+   - Bounding boxes: Rectangles around objects [x1, y1, x2, y2]
+   - Confidence scores: How sure the model is (0-1)
+   - Classes: What type of object (person, car, etc.)
+
+4. **YOLO Documentation:**
+   - [Ultralytics YOLO Docs](https://docs.ultralytics.com/)
+
+---
+
+## 🐛 Troubleshooting
+
+### "CUDA out of memory"
+- Use smaller model: `model_size='n'` instead of `'x'`
+- Reduce video resolution
+- Close other GPU applications
+
+### "Module not found"
+- Make sure virtual environment is activated
+- Re-run: `pip install -r requirements.txt`
+
+### Slow FPS
+- This is normal on CPU
+- GPU should give 30-60 FPS on nano model
+
+---
+
+## 📞 Next Steps
+
+Once you complete Phase 2 successfully, let me know and I'll provide:
+1. Phase 3 code (VLM integration)
+2. Tracking algorithms
+3. Deployment scripts
+
+**Take your time with each phase. Understanding the basics now will make advanced features much easier later!**
