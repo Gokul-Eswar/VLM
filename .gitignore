@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Models
+models/*.pt
+models/*.pth
+models/*.onnx
+
+# Data
+data/test_videos/*
+data/datasets/*
+!data/test_videos/.gitkeep
+!data/datasets/.gitkeep
+
+# Outputs
+outputs/videos/*
+outputs/logs/*
+!outputs/videos/.gitkeep
+!outputs/logs/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
