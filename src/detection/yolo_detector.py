@@ -41,7 +41,7 @@ class YOLODetector:
         model_name = f'yolov8{size}.pt'
         print(f"Loading {model_name}...")
         model = YOLO(model_name)
-        model.to(self.device)
+        # Ultralytics YOLO models handle device during inference
         return model
 
     def detect(self, frame, conf_threshold=0.5):
@@ -55,7 +55,8 @@ class YOLODetector:
         Returns:
             List of detections with bounding boxes and labels
         """
-        results = self.model(frame, conf=conf_threshold, verbose=False)[0]
+        # Pass device during inference
+        results = self.model(frame, conf=conf_threshold, device=self.device, verbose=False)[0]
 
         detections = []
         for box in results.boxes:
