@@ -51,10 +51,16 @@ class YOLODetector:
         results = self.model(frame, conf=conf_threshold, verbose=False)[0]
 
         detections = []
-        for box in results.boxes:
-            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-            conf = float(box.conf[0])
-            cls = int(box.cls[0])
+        # Optimization: Vectorized extraction to reduce CPU overhead
+        # Move all tensors to CPU/numpy at once
+        boxes = results.boxes.xyxy.cpu().numpy()
+        confs = results.boxes.conf.cpu().numpy()
+        clss = results.boxes.cls.cpu().numpy()
+
+        for i in range(len(boxes)):
+            x1, y1, x2, y2 = boxes[i]
+            conf = float(confs[i])
+            cls = int(clss[i])
             label = results.names[cls]
 
             detections.append({
