@@ -466,6 +466,7 @@ class AdvancedSemanticTracker:
             
             # Generate consistent color for track
             color = self._get_color(track_id)
+            text_color = self._get_text_color(color)
             
             # Draw bounding box
             cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 3)
@@ -481,12 +482,12 @@ class AdvancedSemanticTracker:
             # Draw Description (closest to box)
             cv2.rectangle(annotated, (x1, y1 - 20), (x1 + desc_w + 10, y1), color, -1)
             cv2.putText(annotated, desc_label, (x1 + 5, y1 - 5),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 1)
 
             # Draw ID (above description)
             cv2.rectangle(annotated, (x1, y1 - 45), (x1 + id_w + 10, y1 - 20), color, -1)
             cv2.putText(annotated, id_label, (x1 + 5, y1 - 25),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 2)
             
             # Draw center point
             center_x = (x1 + x2) // 2
@@ -508,19 +509,35 @@ class AdvancedSemanticTracker:
                     cv2.line(annotated, points[i-1], points[i], color, 2)
         
         # Draw statistics overlay
-        stats_y = 30
-        cv2.rectangle(annotated, (10, 10), (400, 120), (0, 0, 0), -1)
-        cv2.putText(annotated, f"Frame: {self.frame_count}", (20, stats_y),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        cv2.putText(annotated, f"Active Tracks: {len(tracks)}", (20, stats_y + 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        cv2.putText(annotated, f"Total Tracks: {self.stats['total_tracks']}", (20, stats_y + 60),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        cv2.putText(annotated, "Press 'q' to quit, 's' to save", (20, stats_y + 90),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        # Use semi-transparent background for better visibility
+        overlay = annotated.copy()
+        cv2.rectangle(overlay, (10, 10), (350, 140), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.6, annotated, 0.4, 0, annotated)
+
+        stats_y = 40
+        # Use white for better contrast on dark overlay
+        text_color = (255, 255, 255)
+
+        cv2.putText(annotated, f"Frame: {self.frame_count}", (25, stats_y),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 2)
+        cv2.putText(annotated, f"Active Tracks: {len(tracks)}", (25, stats_y + 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 2)
+        cv2.putText(annotated, f"Total Tracks: {self.stats['total_tracks']}", (25, stats_y + 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 2)
+
+        # Helper text in smaller font / different color
+        cv2.putText(annotated, "Press 'q' to quit, 's' to save", (25, stats_y + 90),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
         
         return annotated
     
+    def _get_text_color(self, background_color):
+        """Calculate optimal text color (black/white) for contrast"""
+        # Calculate luminance: 0.299*R + 0.587*G + 0.114*B (OpenCV uses BGR)
+        b, g, r = background_color
+        luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        return (0, 0, 0) if luminance > 128 else (255, 255, 255)
+
     def _get_color(self, track_id):
         """Generate consistent color for track ID"""
         np.random.seed(track_id)
