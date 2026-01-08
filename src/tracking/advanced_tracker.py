@@ -358,11 +358,8 @@ class AdvancedSemanticTracker:
             return np.empty((0, 2), dtype=int), np.empty((0,), dtype=int), np.arange(len(trackers))
         
         # Compute IoU matrix
-        iou_matrix = np.zeros((len(detections), len(trackers)), dtype=np.float32)
-        
-        for d, det in enumerate(detections):
-            for t, trk in enumerate(trackers):
-                iou_matrix[d, t] = self._iou(det, trk)
+        # Optimized with vectorized operations to avoid nested loops
+        iou_matrix = self._iou_batch(detections, np.array(trackers))
         
         # Hungarian algorithm for optimal assignment
         if min(iou_matrix.shape) > 0:
@@ -430,6 +427,50 @@ class AdvancedSemanticTracker:
         union = area1 + area2 - intersection
         
         return intersection / union if union > 0 else 0.0
+
+    def _iou_batch(self, bboxes1, bboxes2):
+        """
+        Vectorized IoU calculation between two sets of boxes
+
+        Args:
+            bboxes1: (N, 4) numpy array [x1, y1, x2, y2]
+            bboxes2: (M, 4) numpy array [x1, y1, x2, y2]
+
+        Returns:
+            (N, M) numpy array of IoU scores
+        """
+        # Ensure inputs are float32 numpy arrays
+        bboxes1 = np.asarray(bboxes1, dtype=np.float32)
+        bboxes2 = np.asarray(bboxes2, dtype=np.float32)
+
+        # Ensure input dimensions
+        N = bboxes1.shape[0]
+        M = bboxes2.shape[0]
+
+        if N == 0 or M == 0:
+            return np.zeros((N, M), dtype=np.float32)
+
+        # Add dimensions for broadcasting: (N, 1, 4) and (1, M, 4)
+        box1 = bboxes1[:, np.newaxis, :]
+        box2 = bboxes2[np.newaxis, :, :]
+
+        # Intersection
+        xi1 = np.maximum(box1[..., 0], box2[..., 0])
+        yi1 = np.maximum(box1[..., 1], box2[..., 1])
+        xi2 = np.minimum(box1[..., 2], box2[..., 2])
+        yi2 = np.minimum(box1[..., 3], box2[..., 3])
+
+        inter_w = np.maximum(0, xi2 - xi1)
+        inter_h = np.maximum(0, yi2 - yi1)
+        inter_area = inter_w * inter_h
+
+        # Union
+        box1_area = (box1[..., 2] - box1[..., 0]) * (box1[..., 3] - box1[..., 1])
+        box2_area = (box2[..., 2] - box2[..., 0]) * (box2[..., 3] - box2[..., 1])
+        union_area = box1_area + box2_area - inter_area
+
+        # Avoid division by zero
+        return np.divide(inter_area, union_area, out=np.zeros_like(inter_area, dtype=np.float32), where=union_area > 0)
     
     def search_by_description(self, query):
         """
