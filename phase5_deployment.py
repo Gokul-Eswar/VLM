@@ -107,6 +107,22 @@ class SpectrumTrackerService:
         start_time = time.time()
         
         try:
+            # Security Validation
+            if image is None:
+                raise ValueError("Image cannot be None")
+
+            # Enforce 3-channel RGB as per API contract
+            if len(image.shape) != 3 or image.shape[2] != 3:
+                # We could support grayscale (2D) but the API explicitly requests RGB.
+                # Fail fast to prevent unexpected behavior in YOLO/VLM
+                raise ValueError("Image must be (H, W, 3) RGB format")
+
+            if image.shape[0] > 4096 or image.shape[1] > 4096:
+                raise ValueError("Image dimensions too large (max 4096)")
+
+            if image.size == 0:
+                raise ValueError("Image is empty")
+
             # Convert RGB to BGR for OpenCV
             if len(image.shape) == 3 and image.shape[2] == 3:
                 frame = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -159,6 +175,12 @@ class SpectrumTrackerService:
         start_time = time.time()
         results = []
         
+        if len(images) > 32:
+             return {
+                'success': False,
+                'error': "Batch size too large (max 32)"
+            }
+
         for idx, image in enumerate(images):
             result = self.track_image(image)
             result['batch_index'] = idx
@@ -188,6 +210,15 @@ class SpectrumTrackerService:
             JSON with matching tracks
         """
         try:
+            # Security Validation
+            if not query or len(query) > 200:
+                 return {
+                    'success': False,
+                    'error': "Query too long (max 200 chars) or empty"
+                }
+
+            # Sanitize query (simple check to avoid control chars if needed, but length is most important for DoS)
+
             results = self.tracker.search_by_description(query)
             
             matches = []
