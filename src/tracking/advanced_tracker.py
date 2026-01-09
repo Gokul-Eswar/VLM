@@ -358,11 +358,8 @@ class AdvancedSemanticTracker:
             return np.empty((0, 2), dtype=int), np.empty((0,), dtype=int), np.arange(len(trackers))
         
         # Compute IoU matrix
-        iou_matrix = np.zeros((len(detections), len(trackers)), dtype=np.float32)
-        
-        for d, det in enumerate(detections):
-            for t, trk in enumerate(trackers):
-                iou_matrix[d, t] = self._iou(det, trk)
+        # Optimized with vectorization
+        iou_matrix = self._iou_batch(detections, np.array(trackers))
         
         # Hungarian algorithm for optimal assignment
         if min(iou_matrix.shape) > 0:
@@ -396,6 +393,55 @@ class AdvancedSemanticTracker:
         
         return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
     
+    def _iou_batch(self, bboxes1, bboxes2):
+        """
+        Calculate IoU between two sets of bounding boxes using vectorization.
+
+        Args:
+            bboxes1: numpy array of shape (N, 4)
+            bboxes2: numpy array of shape (M, 4)
+
+        Returns:
+            iou_matrix: numpy array of shape (N, M)
+        """
+        # Ensure inputs are numpy arrays
+        bboxes1 = np.asarray(bboxes1)
+        bboxes2 = np.asarray(bboxes2)
+
+        # Return 0 if either is empty
+        if bboxes1.shape[0] == 0 or bboxes2.shape[0] == 0:
+            return np.zeros((bboxes1.shape[0], bboxes2.shape[0]))
+
+        # Add dimensions for broadcasting
+        # bboxes1: (N, 1, 4)
+        # bboxes2: (1, M, 4)
+        bboxes1 = np.expand_dims(bboxes1, 1)
+        bboxes2 = np.expand_dims(bboxes2, 0)
+
+        # Calculate intersection coordinates
+        xx1 = np.maximum(bboxes1[..., 0], bboxes2[..., 0])
+        yy1 = np.maximum(bboxes1[..., 1], bboxes2[..., 1])
+        xx2 = np.minimum(bboxes1[..., 2], bboxes2[..., 2])
+        yy2 = np.minimum(bboxes1[..., 3], bboxes2[..., 3])
+
+        # Calculate intersection width and height
+        w = np.maximum(0.0, xx2 - xx1)
+        h = np.maximum(0.0, yy2 - yy1)
+
+        intersection = w * h
+
+        # Calculate union
+        area1 = (bboxes1[..., 2] - bboxes1[..., 0]) * (bboxes1[..., 3] - bboxes1[..., 1])
+        area2 = (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1])
+
+        union = area1 + area2 - intersection
+
+        # Avoid division by zero
+        # Add a small epsilon or use np.where
+        iou_matrix = np.divide(intersection, union, out=np.zeros_like(intersection), where=union!=0)
+
+        return iou_matrix
+
     def _iou(self, bbox1, bbox2):
         """
         Calculate Intersection over Union (IoU)
