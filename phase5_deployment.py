@@ -107,6 +107,14 @@ class SpectrumTrackerService:
         start_time = time.time()
         
         try:
+            # Security: Validate image dimensions
+            if image.shape[0] > 4096 or image.shape[1] > 4096:
+                logger.warning(f"Security: Image dimensions {image.shape} exceed limit")
+                return {
+                    'success': False,
+                    'error': 'Image dimensions exceed maximum allowed size of 4096px'
+                }
+
             # Convert RGB to BGR for OpenCV
             if len(image.shape) == 3 and image.shape[2] == 3:
                 frame = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -142,7 +150,7 @@ class SpectrumTrackerService:
             logger.error(f"Error processing image: {e}", exc_info=True)
             return {
                 'success': False,
-                'error': str(e)
+                'error': "An internal error occurred processing the image"
             }
     
     @bentoml.api
@@ -156,6 +164,14 @@ class SpectrumTrackerService:
         Returns:
             JSON with batch results
         """
+        # Security: Validate batch size
+        if len(images) > 32:
+            logger.warning(f"Security: Batch size {len(images)} exceeds limit")
+            return {
+                'success': False,
+                'error': 'Batch size exceeds maximum allowed of 32 images'
+            }
+
         start_time = time.time()
         results = []
         
@@ -187,6 +203,14 @@ class SpectrumTrackerService:
         Returns:
             JSON with matching tracks
         """
+        # Security: Validate query length
+        if len(query) > 200:
+            logger.warning(f"Security: Query length {len(query)} exceeds limit")
+            return {
+                'success': False,
+                'error': 'Query length exceeds maximum allowed of 200 characters'
+            }
+
         try:
             results = self.tracker.search_by_description(query)
             
@@ -209,7 +233,7 @@ class SpectrumTrackerService:
             logger.error(f"Error searching tracks: {e}", exc_info=True)
             return {
                 'success': False,
-                'error': str(e)
+                'error': "An internal error occurred searching tracks"
             }
     
     @bentoml.api
