@@ -357,12 +357,8 @@ class AdvancedSemanticTracker:
         if len(detections) == 0:
             return np.empty((0, 2), dtype=int), np.empty((0,), dtype=int), np.arange(len(trackers))
         
-        # Compute IoU matrix
-        iou_matrix = np.zeros((len(detections), len(trackers)), dtype=np.float32)
-        
-        for d, det in enumerate(detections):
-            for t, trk in enumerate(trackers):
-                iou_matrix[d, t] = self._iou(det, trk)
+        # Compute IoU matrix using vectorized operation
+        iou_matrix = self._iou_vectorized(detections, trackers)
         
         # Hungarian algorithm for optimal assignment
         if min(iou_matrix.shape) > 0:
@@ -430,6 +426,48 @@ class AdvancedSemanticTracker:
         union = area1 + area2 - intersection
         
         return intersection / union if union > 0 else 0.0
+
+    def _iou_vectorized(self, bboxes1, bboxes2):
+        """
+        Vectorized IoU calculation for multiple boxes.
+
+        Args:
+            bboxes1: [N, 4] numpy array
+            bboxes2: [M, 4] numpy array
+
+        Returns:
+            [N, M] IoU matrix
+        """
+        # Ensure they are numpy arrays
+        bboxes1 = np.asarray(bboxes1)
+        bboxes2 = np.asarray(bboxes2)
+
+        # Expand dims to allow broadcasting: bboxes1 -> [N, 1, 4], bboxes2 -> [1, M, 4]
+        b1 = bboxes1[:, None, :]
+        b2 = bboxes2[None, :, :]
+
+        # Intersection top-left
+        x1_i = np.maximum(b1[..., 0], b2[..., 0])
+        y1_i = np.maximum(b1[..., 1], b2[..., 1])
+
+        # Intersection bottom-right
+        x2_i = np.minimum(b1[..., 2], b2[..., 2])
+        y2_i = np.minimum(b1[..., 3], b2[..., 3])
+
+        # Intersection area
+        intersection_w = np.maximum(0.0, x2_i - x1_i)
+        intersection_h = np.maximum(0.0, y2_i - y1_i)
+        intersection = intersection_w * intersection_h
+
+        # Union area
+        area1 = (b1[..., 2] - b1[..., 0]) * (b1[..., 3] - b1[..., 1])
+        area2 = (b2[..., 2] - b2[..., 0]) * (b2[..., 3] - b2[..., 1])
+        union = area1 + area2 - intersection
+
+        # Calculate IoU, handling potential division by zero
+        iou = intersection / (union + 1e-6)
+
+        return iou
     
     def search_by_description(self, query):
         """
