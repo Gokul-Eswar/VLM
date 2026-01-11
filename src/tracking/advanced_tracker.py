@@ -478,15 +478,18 @@ class AdvancedSemanticTracker:
             (id_w, id_h), _ = cv2.getTextSize(id_label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
             (desc_w, desc_h), _ = cv2.getTextSize(desc_label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
 
+            # Determine text color based on background
+            text_color = self._get_contrast_color(color)
+
             # Draw Description (closest to box)
             cv2.rectangle(annotated, (x1, y1 - 20), (x1 + desc_w + 10, y1), color, -1)
             cv2.putText(annotated, desc_label, (x1 + 5, y1 - 5),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 1)
 
             # Draw ID (above description)
             cv2.rectangle(annotated, (x1, y1 - 45), (x1 + id_w + 10, y1 - 20), color, -1)
             cv2.putText(annotated, id_label, (x1 + 5, y1 - 25),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 2)
             
             # Draw center point
             center_x = (x1 + x2) // 2
@@ -507,9 +510,12 @@ class AdvancedSemanticTracker:
                 for i in range(1, len(points)):
                     cv2.line(annotated, points[i-1], points[i], color, 2)
         
-        # Draw statistics overlay
+        # Draw statistics overlay with transparency
         stats_y = 30
-        cv2.rectangle(annotated, (10, 10), (400, 120), (0, 0, 0), -1)
+        overlay = annotated.copy()
+        cv2.rectangle(overlay, (10, 10), (400, 120), (0, 0, 0), -1)
+        annotated = cv2.addWeighted(overlay, 0.6, annotated, 0.4, 0)
+
         cv2.putText(annotated, f"Frame: {self.frame_count}", (20, stats_y),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         cv2.putText(annotated, f"Active Tracks: {len(tracks)}", (20, stats_y + 30),
@@ -525,6 +531,15 @@ class AdvancedSemanticTracker:
         """Generate consistent color for track ID"""
         np.random.seed(track_id)
         return tuple(map(int, np.random.randint(50, 255, 3)))
+
+    def _get_contrast_color(self, bg_color):
+        """
+        Calculate best text color (black or white) for a given background (BGR)
+        Uses Rec. 601 luminance coefficients
+        """
+        b, g, r = bg_color
+        luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        return (0, 0, 0) if luminance > 128 else (255, 255, 255)
 
 
 def demo_advanced_tracking():
