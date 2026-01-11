@@ -356,13 +356,45 @@ class AdvancedSemanticTracker:
         
         if len(detections) == 0:
             return np.empty((0, 2), dtype=int), np.empty((0,), dtype=int), np.arange(len(trackers))
+
+        # Ensure trackers is a numpy array
+        if isinstance(trackers, list):
+            trackers = np.array(trackers)
         
         # Compute IoU matrix
-        iou_matrix = np.zeros((len(detections), len(trackers)), dtype=np.float32)
+        # Optimization: Vectorized IoU calculation
+        # This replaces the nested loop O(N*M) with optimized numpy operations
+
+        # Expand dimensions for broadcasting
+        # detections: (N, 4) -> (N, 1, 4)
+        # trackers: (M, 4) -> (1, M, 4)
+        det_exp = detections[:, np.newaxis, :]
+        trk_exp = trackers[np.newaxis, :, :]
+
+        # Calculate intersection coordinates
+        # x1, y1 is max of top-left coordinates
+        xx1 = np.maximum(det_exp[..., 0], trk_exp[..., 0])
+        yy1 = np.maximum(det_exp[..., 1], trk_exp[..., 1])
+
+        # x2, y2 is min of bottom-right coordinates
+        xx2 = np.minimum(det_exp[..., 2], trk_exp[..., 2])
+        yy2 = np.minimum(det_exp[..., 3], trk_exp[..., 3])
+
+        # Calculate intersection area
+        w = np.maximum(0.0, xx2 - xx1)
+        h = np.maximum(0.0, yy2 - yy1)
+        intersection = w * h
+
+        # Calculate union area
+        area_det = (detections[:, 2] - detections[:, 0]) * (detections[:, 3] - detections[:, 1])
+        area_trk = (trackers[:, 2] - trackers[:, 0]) * (trackers[:, 3] - trackers[:, 1])
+
+        # Broadcast areas: (N, 1) + (1, M) -> (N, M)
+        union = area_det[:, np.newaxis] + area_trk[np.newaxis, :] - intersection
         
-        for d, det in enumerate(detections):
-            for t, trk in enumerate(trackers):
-                iou_matrix[d, t] = self._iou(det, trk)
+        # Compute IoU
+        # Add epsilon to avoid division by zero
+        iou_matrix = intersection / (union + 1e-6)
         
         # Hungarian algorithm for optimal assignment
         if min(iou_matrix.shape) > 0:
