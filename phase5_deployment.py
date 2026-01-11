@@ -107,6 +107,13 @@ class SpectrumTrackerService:
         start_time = time.time()
         
         try:
+            # Input validation
+            if image.shape[0] > 4096 or image.shape[1] > 4096:
+                return {
+                    'success': False,
+                    'error': 'Image dimensions exceed maximum allowed dimension of 4096px'
+                }
+
             # Convert RGB to BGR for OpenCV
             if len(image.shape) == 3 and image.shape[2] == 3:
                 frame = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -156,6 +163,13 @@ class SpectrumTrackerService:
         Returns:
             JSON with batch results
         """
+        # Input validation
+        if len(images) > 32:
+            return {
+                'success': False,
+                'error': 'Batch size exceeds limit of 32 images'
+            }
+
         start_time = time.time()
         results = []
         
@@ -188,6 +202,13 @@ class SpectrumTrackerService:
             JSON with matching tracks
         """
         try:
+            # Input validation
+            if len(query) > 200:
+                return {
+                    'success': False,
+                    'error': 'Query length exceeds limit of 200 characters'
+                }
+
             results = self.tracker.search_by_description(query)
             
             matches = []
