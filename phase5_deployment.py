@@ -23,6 +23,11 @@ import time
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Security Constants
+MAX_BATCH_SIZE = 32
+MAX_IMAGE_SIZE = 4096
+MAX_QUERY_LENGTH = 200
+
 
 # ============================================================================
 # Model Service Definition
@@ -107,6 +112,13 @@ class SpectrumTrackerService:
         start_time = time.time()
         
         try:
+            # Security check: Image dimensions
+            if image.shape[0] > MAX_IMAGE_SIZE or image.shape[1] > MAX_IMAGE_SIZE:
+                return {
+                    'success': False,
+                    'error': f'Image dimensions exceed maximum allowed size of {MAX_IMAGE_SIZE}px'
+                }
+
             # Convert RGB to BGR for OpenCV
             if len(image.shape) == 3 and image.shape[2] == 3:
                 frame = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -142,7 +154,7 @@ class SpectrumTrackerService:
             logger.error(f"Error processing image: {e}", exc_info=True)
             return {
                 'success': False,
-                'error': str(e)
+                'error': 'An internal error occurred while processing the image'
             }
     
     @bentoml.api
@@ -156,6 +168,13 @@ class SpectrumTrackerService:
         Returns:
             JSON with batch results
         """
+        # Security check: Batch size
+        if len(images) > MAX_BATCH_SIZE:
+            return {
+                'success': False,
+                'error': f'Batch size exceeds maximum allowed size of {MAX_BATCH_SIZE}'
+            }
+
         start_time = time.time()
         results = []
         
@@ -188,6 +207,13 @@ class SpectrumTrackerService:
             JSON with matching tracks
         """
         try:
+            # Security check: Query length
+            if len(query) > MAX_QUERY_LENGTH:
+                return {
+                    'success': False,
+                    'error': f'Query length exceeds maximum allowed length of {MAX_QUERY_LENGTH} characters'
+                }
+
             results = self.tracker.search_by_description(query)
             
             matches = []
@@ -209,7 +235,7 @@ class SpectrumTrackerService:
             logger.error(f"Error searching tracks: {e}", exc_info=True)
             return {
                 'success': False,
-                'error': str(e)
+                'error': 'An internal error occurred while searching tracks'
             }
     
     @bentoml.api
@@ -236,7 +262,7 @@ class SpectrumTrackerService:
             logger.error(f"Error resetting tracker: {e}", exc_info=True)
             return {
                 'success': False,
-                'error': str(e)
+                'error': 'An internal error occurred while resetting the tracker'
             }
     
     @bentoml.api
