@@ -478,15 +478,18 @@ class AdvancedSemanticTracker:
             (id_w, id_h), _ = cv2.getTextSize(id_label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
             (desc_w, desc_h), _ = cv2.getTextSize(desc_label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
 
+            # Determine text color based on background luminance
+            text_color = self._get_text_color(color)
+
             # Draw Description (closest to box)
             cv2.rectangle(annotated, (x1, y1 - 20), (x1 + desc_w + 10, y1), color, -1)
             cv2.putText(annotated, desc_label, (x1 + 5, y1 - 5),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 1)
 
             # Draw ID (above description)
             cv2.rectangle(annotated, (x1, y1 - 45), (x1 + id_w + 10, y1 - 20), color, -1)
             cv2.putText(annotated, id_label, (x1 + 5, y1 - 25),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 2)
             
             # Draw center point
             center_x = (x1 + x2) // 2
@@ -507,9 +510,13 @@ class AdvancedSemanticTracker:
                 for i in range(1, len(points)):
                     cv2.line(annotated, points[i-1], points[i], color, 2)
         
-        # Draw statistics overlay
+        # Draw statistics overlay with semi-transparent background
         stats_y = 30
-        cv2.rectangle(annotated, (10, 10), (400, 120), (0, 0, 0), -1)
+        overlay = annotated.copy()
+        cv2.rectangle(overlay, (10, 10), (400, 120), (0, 0, 0), -1)
+        alpha = 0.6  # Transparency factor
+        annotated = cv2.addWeighted(overlay, alpha, annotated, 1 - alpha, 0)
+
         cv2.putText(annotated, f"Frame: {self.frame_count}", (20, stats_y),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         cv2.putText(annotated, f"Active Tracks: {len(tracks)}", (20, stats_y + 30),
@@ -521,6 +528,22 @@ class AdvancedSemanticTracker:
         
         return annotated
     
+    def _get_text_color(self, bg_color):
+        """
+        Calculate optimal text color (black or white) for a given background color
+        using Rec. 601 coefficients for luminance.
+        bg_color is (B, G, R)
+        """
+        # OpenCV uses BGR
+        b, g, r = bg_color
+        luminance = 0.299 * r + 0.587 * g + 0.114 * b
+
+        # If luminance is high (bright), use black text. Otherwise use white.
+        if luminance > 128:
+            return (0, 0, 0)
+        else:
+            return (255, 255, 255)
+
     def _get_color(self, track_id):
         """Generate consistent color for track ID"""
         np.random.seed(track_id)
