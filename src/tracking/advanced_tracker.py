@@ -358,11 +358,7 @@ class AdvancedSemanticTracker:
             return np.empty((0, 2), dtype=int), np.empty((0,), dtype=int), np.arange(len(trackers))
         
         # Compute IoU matrix
-        iou_matrix = np.zeros((len(detections), len(trackers)), dtype=np.float32)
-        
-        for d, det in enumerate(detections):
-            for t, trk in enumerate(trackers):
-                iou_matrix[d, t] = self._iou(det, trk)
+        iou_matrix = self._iou_vectorized(detections, np.array(trackers))
         
         # Hungarian algorithm for optimal assignment
         if min(iou_matrix.shape) > 0:
@@ -431,6 +427,47 @@ class AdvancedSemanticTracker:
         
         return intersection / union if union > 0 else 0.0
     
+    def _iou_vectorized(self, bboxes1, bboxes2):
+        """
+        Vectorized IoU calculation for multiple boxes
+
+        Args:
+            bboxes1: (N, 4) numpy array
+            bboxes2: (M, 4) numpy array
+
+        Returns:
+            (N, M) IoU matrix
+        """
+        if len(bboxes1) == 0 or len(bboxes2) == 0:
+            return np.zeros((len(bboxes1), len(bboxes2)), dtype=np.float32)
+
+        # Expand dims for broadcasting
+        # bboxes1: (N, 1, 4)
+        # bboxes2: (1, M, 4)
+        b1 = np.expand_dims(bboxes1, axis=1)
+        b2 = np.expand_dims(bboxes2, axis=0)
+
+        # Calculate intersection rectangle
+        x1_i = np.maximum(b1[..., 0], b2[..., 0])
+        y1_i = np.maximum(b1[..., 1], b2[..., 1])
+        x2_i = np.minimum(b1[..., 2], b2[..., 2])
+        y2_i = np.minimum(b1[..., 3], b2[..., 3])
+
+        # Calculate intersection area
+        w_i = np.maximum(0, x2_i - x1_i)
+        h_i = np.maximum(0, y2_i - y1_i)
+        intersection = w_i * h_i
+
+        # Calculate areas
+        area1 = (b1[..., 2] - b1[..., 0]) * (b1[..., 3] - b1[..., 1])
+        area2 = (b2[..., 2] - b2[..., 0]) * (b2[..., 3] - b2[..., 1])
+        union = area1 + area2 - intersection
+
+        # Avoid division by zero
+        union = np.maximum(union, 1e-6)
+
+        return intersection / union
+
     def search_by_description(self, query):
         """
         Search for tracks matching a description
