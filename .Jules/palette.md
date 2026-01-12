@@ -1,0 +1,3 @@
+## 2024-03-21 - [Dynamic Text Contrast for Video Overlays]
+**Learning:** Hardcoded white text on random background colors (common in object tracking visualizations) creates accessibility failures when the background is light. Using luminance calculation (Rec. 601) to dynamically switch between black and white text solves this. Also, opaque statistics overlays occlude too much video content; semi-transparent overlays (via `cv2.addWeighted`) are a better pattern.
+**Action:** When creating OpenCV visualizations, always implement a `get_text_color(bg_color)` helper and use `addWeighted` for overlays instead of solid rectangles.
